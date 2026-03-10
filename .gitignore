@@ -1,0 +1,16 @@
+.DS_Store
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# SwiftPM and Xcode local build artifacts.
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Local reference clone of the upstream Python reverse-engineering repo.
+ph4-walkingpad/

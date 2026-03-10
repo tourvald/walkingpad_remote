@@ -1,0 +1,286 @@
+# AGENTS NOTES (iOS UI)
+
+## Scope
+This file tracks UI-level decisions for `WalkingPadRemote` iOS target.
+
+## Public Repo Notes (2026-03-10)
+- Legacy TV control code, certificates, and vendored Android TV sources were removed from the iOS target.
+- The public repo now contains only treadmill, workout, watch, and plank functionality.
+- `Package.swift` excludes UI/resources that are outside the pure logic target so `swift test` stays focused on core logic without SwiftPM file warnings.
+
+## File Decomposition (2026-02-26)
+- `ContentView.swift` was split so root navigation/composition stays in one file, and reusable UI blocks are isolated:
+  - `PlankTimerView.swift` (`PlankTimerView`)
+  - `CommonInfoCard.swift` (`CommonInfoCard`)
+  - `StatusPillsRow.swift` (`StatusPillsRow`, `StatusPill`, `StatusPillLabel`)
+  - `ContentSharedUIComponents.swift` (`ExtendTimeButton`, `Card`, `StatTile`, related style)
+  - `PlankTimerView.swift` explicitly imports `Combine` because `Timer.publish(...).autoconnect()` is used there
+- `BluetoothManager.swift` keeps orchestration/state, while helper modules now own focused logic:
+  - `BLETransportCodec.swift` for FTMS/FitShow packet/frame build+parse helpers
+  - `HRDomainService.swift` for adaptive HR decision math
+  - `TrainingTelemetryWriter.swift` for telemetry CSV/JSON conversion and logs directory retention helpers
+- Additional extracted domain services:
+  - `CommandQueueService.swift` for queue coalescing/high-priority replacement/clear logic
+  - `TreadmillSpeedBoundsService.swift` for treadmill min/max/increment normalization and clamping
+- `BluetoothManager` now delegates queue mutations and speed-bound clamping to these services (intended to keep runtime behavior unchanged).
+- Added logic-focused unit test package setup:
+  - package manifest: `ios/WalkingPadRemote/WalkingPadRemote/Package.swift`
+  - core target: `WalkingPadCoreLogic` (pure logic files only)
+  - tests: `ios/WalkingPadRemote/WalkingPadRemote/WalkingPadRemoteCoreTests`
+  - run: `cd ios/WalkingPadRemote/WalkingPadRemote && swift test`
+- Refactor goal was structural only; runtime behavior and public UI flows were not intentionally changed.
+
+## Current Bottom Tabs
+- `HR‑контроль`
+- `Статистика`
+- `Планка`
+- `Отладка`
+
+## Current Control Screen Architecture
+- `ContentView` bottom tab `HR‑контроль` keeps top area static:
+  - hero status card (`Дорожка` / `Часы`)
+  - `CommonInfoCard`
+- Navigation persistence:
+  - bottom tab selection is persisted via `@AppStorage("content_selected_root_tab_v1")`
+  - app restores last active root tab on launch instead of always defaulting to first one
+- `CommonInfoCard` uses full `3x3` metrics grid:
+  - row 1: pulse / speed / speed delta
+  - row 2: time / distance / steps
+  - row 3: average HR / beats per meter / average speed
+- `beats per meter` details are shown from `CommonInfoCard` tap via info sheet.
+- HR control card no longer duplicates `beats per meter`.
+- HR control card uses compact watch availability UI:
+  - no large "cannot start" warning block
+  - show orange/red `applewatch` icon near `HR‑контроль` title when unavailable
+  - tap icon to view current reason (not paired / app missing / unreachable / no HR stream)
+  - alert is snapshot-based (`alert(item:)`) so rapid HR/state updates do not stall popup opening
+- HR control title line now also shows current target inline (`цель <bpm>bpm`) to keep key context in one row.
+- HR control `running` state presentation is now a single grouped block (instead of fragmented lines):
+  - stage chip with icon (`Тренировка` / `Заминка`)
+  - compact next-decision chip (`След. решение ...с`)
+  - predictor status line
+  - dedicated `Решение алгоритма` sub-block with current decision details
+  - remaining time in `mm:ss` (or `h:mm:ss`) + linear progress
+  - `+5 мин` action embedded into the same running block (main session only)
+  - all changes are UI-only; HR control logic/decisions/commands are unchanged
+- HR control `running` block got an additional Apple Fitness style polish:
+  - remaining time is visually dominant (larger rounded monospaced font) with contextual subtitle (`до заминки` / `до завершения`)
+  - decision copy (`Решение`) is intentionally compact and placed into a subtle material sub-card with light separator stroke
+  - stage and next-decision chips use softer capsule styling for clearer hierarchy without visual noise
+  - progress bar uses thinner capsule style and shows compact percent on the right
+  - outer background wrapper for running block was removed, so running content now uses full available HR-card width without additional nested insets
+  - `ExtendTimeButton` switched to the same visual style as zone tiles (`Зона` / `Время`): accent gradient tile, rounded rect, and highlighted stroke
+- HR control card redesign (2026-03-03, figma-style):
+  - `HRControlPanel` presentation was reorganized into clear sub-cards (header, running section, zones, parameters, status)
+  - header adds compact metric chips (`Цель`, `Время`, `Заминка`) and a clearer watch-issue button style
+  - running state card now has stronger stage-tinted container hierarchy and a capsule-style predictor line
+  - start/stop buttons keep existing behavior, with explicit semantic visual tint (`accent` start, `red` stop)
+  - logic/commands/algorithms remain unchanged; this update is presentation-only
+- HR control running card redesign (2026-03-03, figma-style running pass):
+  - `runningStatusSection` visuals were rebuilt with a stronger timer hero surface and stage-tinted gradient container
+  - predictor status line now uses a separate rounded strip; decision text moved to an explicit `Решение алгоритма` block
+  - progress presentation now uses one clamped percentage value across badge/footer (`Прогресс сессии`) for visual consistency
+  - extend-session action and all HR runtime logic are unchanged (UI-only update)
+- HR control deduplication pass (2026-03-03, figma-style cleanup):
+  - duplicate parameter reflections were reduced to keep the card laconic and modern
+  - header row no longer repeats target BPM under `HR‑контроль`
+  - top compact chips are now `Цель`, `Шаг`, `Заминка`; duration is shown/edited only in `Время` tile inside zone grid
+  - running section now displays session percent in one place (`Прогресс сессии`) instead of duplicate percent badges
+  - all changes are presentation-only; behavior/algorithms/commands stay the same
+- HR control running focus pass (2026-03-03):
+  - while `isHrControlRunning` is active, `Целевая зона` and `Параметры` sections are hidden from main card
+  - stop action is now inside running section:
+    - in main stage it sits directly under `+5 мин`
+    - in cooldown it is rendered as a full-width button at the bottom of the running block
+  - logic is unchanged; only UI visibility/placement was adjusted
+- HR control running layout refinement (2026-03-07):
+  - active running card no longer shows the upper header block (`HR‑контроль` + `Цель/Заминка` chips)
+  - progress UI is now at the top of running section with a wider/thicker bar and `%` summary row
+  - `ТРЕНИРОВКА/ЗАМИНКА` and `След. решение через ...` chips share one capsule style and aligned layout
+  - stop action switched to the same tile style as `+5 мин` via shared action-tile component (red tint for destructive intent)
+  - behavior remains unchanged; update is strictly visual
+- HR target selection in card is zone-based:
+  - five zone buttons (`Зона 1` ... `Зона 5`) with zone colors
+  - selected zone has explicit high-contrast visual state (strong fill + white border + checkmark + subtle scale/shadow)
+  - selecting zones 1..4 sets target BPM to zone midpoint with floor formula:
+    `target = lowerBound + ((upperBound - lowerBound) / 2)`
+  - selecting zone 5 sets target BPM to zone 5 lower bound (fixed floor for top zone)
+- `Целевой пульс` text line below zone grid is removed (target shown in title row).
+- HR duration selector is merged into zone grid:
+  - 6th tile `Время` sits next to `Зона 1...5`
+  - tap opens modal `sheet` with wheel picker (`1...120`) and quick `+/- 5` actions
+  - separate duration block under zones is removed
+- `ControlSwipeView` now renders only one page: `HRControlPanel` (`HR‑контроль`).
+- `Управление` visual refresh (2026-03-03):
+  - `ControlSwipeView` got style-only redesign to match modern app look (no behavior changes)
+  - added layered background (`systemGrouped` gradient + soft accent glows)
+  - added hero card with concise mode description and quick runtime metrics
+  - explicit top `Управление` title was removed from this screen to reduce visual noise
+  - current layout keeps static top blocks + one `HRControlPanel` content block
+- `Управление` dedup pass (2026-03-03):
+  - removed duplicate legacy `StatusPillsRow` from `ControlSwipeView` to avoid repeated connection/watch status blocks
+  - hero metrics are now only `Дорожка` and `Часы`; `Скорость` tile was removed as a duplicate signal
+  - treadmill connect flow moved into hero tile `Дорожка` (tap opens `DevicePickerView`; connect-error/suggestion/info alert flow preserved)
+  - watch tile `Часы` now performs `pingWatch()` on tap
+- `HR‑контроль` single-screen pass (2026-03-03):
+  - removed `Пульт` and removed segmented/page switching from this tab
+  - tab label renamed from `Управление` to `HR‑контроль`
+  - top helper text `Автоподстройка скорости по пульсу и целевой зоне.` removed from UI
+- Legacy standalone `HRControlView` has been deleted to avoid duplicate UI logic and drift; `HRControlPanel` is the single source for HR card rendering.
+
+## Current Stats Screen Architecture
+- `WorkoutStatsView` uses the same segmented + swipe pattern as control:
+  - segmented control (`Неделя` / `Месяц`)
+  - horizontal swipe (`TabView` with `.page(indexDisplayMode: .never)`)
+- Only the period summary block is swipeable.
+- `WorkoutHistoryCard` stays static below the swipe block and does not switch with pages.
+- `WorkoutHistoryCard` now shows per-workout average HR as a dedicated metric (`Ср. пульс`) in the right-side metrics column (`—` if no value).
+- `WorkoutHistoryCard` also shows per-workout average speed as `Ср. скорость` (`км/ч`, `—` if no value).
+- Period navigation and summary content are per-page (week and month keep independent offsets).
+
+## Unified Switch Pattern
+- For equivalent screen switching, always use the same UX pattern:
+  - segmented `Picker`
+  - `TabView` page swipe without visible page dots
+  - animated binding with `.easeInOut(duration: 0.25)`
+- Apply this consistently across existing and new screens.
+- Device picker performance guardrails:
+  - no implicit animation on `List` updates from Bluetooth discovery
+  - during rename sheet, scanning is paused and resumed after dismiss
+  - during list interaction (long-press for context menu, drag/swipe), scanning enters short "quiet mode" and resumes automatically
+- BLE treadmill protocol support (manager-level behavior reflected in UI device discovery):
+  - discovery scan now includes service filters: `FE00` (WalkingPad), `1826` (FTMS), `FFF0` (FitShow/FitMonster)
+  - protocol is auto-selected after service discovery (priority: `FE00` → `1826` → `FFF0`)
+  - `Manual` and `HR-control` speed changes route through the selected protocol (start/stop/set speed)
+  - command write rate is protocol-specific: WalkingPad keeps conservative spacing; FTMS/FitShow allow faster command sequences
+  - FTMS speed units: `Set Target Speed (0x02)` and `Treadmill Data (2ACD)` instantaneous speed are handled as `0.01 km/h`
+  - FTMS speed bounds: when available, app reads `Supported Speed Range (2AD4)` and updates `min/max/increment` (km/h); `ManualView` slider and speed commands are clamped to these bounds (so devices with e.g. 6 km/h max do not get invalid targets)
+  - command queue safety: speed writes are coalesced (only latest target kept), and `STOP` is high priority so it is not delayed by queued speed changes
+- HR adaptive-step behavior (current):
+  - adaptive thresholds are percent-based and configurable by user (relative to current target HR)
+  - default thresholds:
+    - `deadband` = `3.0%`
+    - speed down: `DOWN-L2` from `8.0%`, `DOWN-L3` from `15.0%`, `DOWN-L4` from `23.0%`
+    - speed up: `UP-L2` from `23.0%`, `UP-L3` from `31.0%`, `UP-L4` from `46.0%`
+  - adaptive level steps are fixed (not scaled from max step):
+    - `L1 = 0.1 km/h`, `L2 = 0.2 km/h`, `L3 = 0.3 km/h`, `L4 = 0.4 km/h`
+    - same per-level deltas are used for both directions (`UP`/`DOWN`)
+  - treadmill granularity remains `0.1 km/h`; adaptive levels already match it
+  - decision diagnostics include explicit step tag in UI/logs: `UP/DOWN-HOLD` + level (`L0..L4`) or `FIXED`
+- HR parameters screen now has a visual adaptive-step section (`Наглядный шаг`):
+  - sample HR slider previews current decision tag and resulting speed delta
+  - table shows decision ranges in both absolute `bpm` and `%` of current target HR
+  - decision table `%` ranges are signed by direction (`UP` negative, `DOWN` positive) for better readability
+  - table is mode-aware: adaptive (`L0..L4`) and fixed (`UP/DOWN-FIXED`) representations
+  - footer clarifies that runtime inertia lock (trend/prediction gate) is not applied to this preview table
+- HR adaptive thresholds are configurable by user in `%` of target HR:
+  - settings UI in `HRParametersFormView` adds section `Пороги адаптивного шага (%)`
+  - editable values: `Deadband (HOLD)`, `DOWN-L2`, `DOWN-L3`, `DOWN-L4`, `UP-L2`, `UP-L3`, `UP-L4`
+  - each threshold control line shows resulting adaptive deltas (`км/ч`) from fixed ladder `0.1/0.2/0.3/0.4`
+  - `DOWN-L2` / `UP-L2` controls are presented as explicit `L1→L2` boundaries, so users can tune `L1` range directly
+  - non-editable gray helper rows in this section were removed (to avoid duplicated noisy text); section now focuses on editable controls
+  - boundary control labels explicitly describe adjacent ranges (`L1`/`L2`/`L3`) so separation between levels is visible in-place
+  - current UX format in this section matches a simplified human-readable scheme:
+    - `Deadband (HOLD)` with explicit no-change range
+    - `DOWN-L1..L4` and `UP-L1..L4` lines shown as compact contiguous ranges with resulting speed change
+  - these values are persisted in `hr_settings_v1` and used directly by `BluetoothManager` adaptive decision logic to choose step level (`L1..L4`)
+  - effective hold/deviation checks are derived at runtime from current target BPM (`percent -> bpm`), so changing target immediately shifts absolute bpm ranges
+  - `hrSpeedStepKmh` control is now explicitly for `FIXED` mode and cooldown, not for adaptive level scaling
+- Cooldown settings block (`Параметры -> Заминка`) now includes duration control:
+  - added `Время заминки` stepper in minutes (`1...30`)
+  - value is persisted in HR settings (`cooldownMaxMinutes`) and used as cooldown timeout instead of hardcoded `300s`
+- Structured training telemetry logging:
+  - on each HR session start, app creates JSONL file under app `Application Support/TrainingLogs`
+  - each event payload now contains full runtime snapshot: `session_state`, HR (`current/last/target`), target zone (`index/lower/upper bpm`), speed (`actual/target/device_target/reported`), `speed_delta_kmh`, distance/time/steps, treadmill status
+  - telemetry events include: `session_start/session_end`, HR samples/decisions, cooldown state and completion, BLE command writes/ack timeouts, FE01 parsed status, workout save result
+  - speed-related events are split for analysis:
+    - `speed_target_changed` (reason + before/after/delta) for manual commands, HR decisions, and cooldown adjustments
+    - `speed_actual_changed` (source + before/after/delta) from FE01 / FTMS / FitShow notifications
+  - BLE/protocol diagnostics are logged as dedicated events: `ble_connection_event`, `notify_update_error`, `notify_ftms_machine_status`, `command_queue_reset`, `command_speed_coalesced`
+  - telemetry session closes on all stop paths (manual stop, no HR, no connection, BLE disconnect, cooldown complete)
+- Debug export for offline analysis:
+  - `Отладка -> Debug -> Training Logs -> Export Training CSV`
+  - export combines all stored HR JSONL sessions into one CSV file in app temp directory (`Training_History_<timestamp>.csv`)
+  - CSV has normalized columns (`ts`, HR/speed/zone/session/decision/BLE queue/error fields) and `raw_json` for full-fidelity payload
+- Cooldown research telemetry (for upcoming adaptive cooldown formula):
+  - runtime cooldown logic is intentionally unchanged in this step
+  - logs now capture extra recovery features:
+    - workload before cooldown: `session_peak_bpm`, `main_avg_bpm`, `main_peak_bpm`, `zone_seconds`, `zone4plus_seconds`
+    - cooldown outcome: `cooldown_start_hr_bpm`, `cooldown_end_hr_bpm`, `cooldown_peak_hr_bpm`, `cooldown_planned_s`, `cooldown_elapsed_s`, `cooldown_target_hit_elapsed_s`, `cooldown_hr_drop_bpm`, `cooldown_hr_recovery_bpm_per_min`
+  - when cooldown ends by timeout and HR is still above target, event `cooldown_insufficient` is logged
+- Training-log quality fixes (2026-02-22):
+  - CSV export conversion fixed: numeric zeros are preserved as numbers (no `false` in numeric columns); bool detection for `NSNumber` is now explicit
+  - command ACK timeout watchdog now runs only for `withResponse` writes; `withoutResponse` writes no longer generate false timeout alarms
+  - `command_write` telemetry includes `ack_expected` (bool)
+  - cooldown speed branch updates `lastCommandLine` to `CMD cooldown adjust -> ...` so timeout context is not stale
+  - `startHrControl` now resets per-session counters before writing `session_start`, so startup telemetry baseline is clean
+- Debug tab includes HR-card preview mode (without starting real HR control):
+  - renders full `HRControlPanel` in `Тренировка` or `Заминка` state
+  - supports optional `нет сигнала пульса` simulation
+  - preview action buttons are non-operative (no treadmill command side effects)
+
+## Plank Tab
+- `Планка` is a minimal standalone bottom tab for a plank countdown.
+- current behavior:
+  - one tappable circle starts reverse timer from current set duration (base `60` seconds)
+  - timer displays `mm:ss` in center
+  - after countdown completes, app plays a short system beep + haptic combo
+  - while timer is running, `Сбросить` button is available
+  - manual baseline measurement flow:
+    - hold circle for `3` seconds to open confirmation menu for measurement start
+    - measurement confirmation UI is centered `alert` (not bottom action sheet)
+    - when confirmation appears, app emits stronger prompt feedback (warning haptic + rigid impact + vibration fallback)
+    - hold detection uses manual press lifecycle (`DragGesture(minimumDistance: 0)` + delayed trigger token), not `onLongPressGesture`, for stable on-device behavior
+    - release after unfinished hold does not auto-start plank; tap start is accepted only for short press (`<= 0.35s`)
+    - hold-to-cancel hints use wording `для остановки`
+  - plank completion feedback includes explicit visual confirmation (`Подход завершён` banner for ~2s) and stronger sound/haptic combo (tone + vibration fallback + second tone + success/heavy haptics)
+    - stopwatch measurement starts only after user confirms (`Начать замер`)
+    - while holding, circle shows visual hold progress until measurement trigger
+    - tap circle during measurement to finish and save measured hold time as new baseline duration
+    - saving measurement resets completed plank counter to restart progression from new baseline
+  - progression settings are shown below timer:
+    - `Добавлять секунд`: how many seconds to add per progression step
+    - `Повышать каждые`: after how many completed planks duration increases
+    - `Планок в неделю`: estimated weekly plank count used for forecast
+  - duration progression rule:
+    - next set duration = `60 + (completedSets / everyCount) * stepSeconds`
+  - one-year forecast:
+    - projected yearly sets = `weeklySets * 52`
+    - projected set duration in one year uses the same progression rule with `completedSets + projectedYearlySets`
+  - persisted keys:
+    - `plank_base_duration_seconds_v1`
+    - `plank_increase_step_seconds_v1`
+    - `plank_increase_every_count_v1`
+    - `plank_completed_sets_count_v1`
+    - `plank_estimated_weekly_sets_v1`
+- implementation location:
+  - `PlankTimerView.swift` (`PlankTimerView`)
+- this tab is intentionally UI-only and independent from treadmill/HR business logic.
+- reliability/UI update (2026-02-16):
+  - fixed countdown stability by storing ticker as stable `@State` timer publisher in `PlankTimerView`
+  - kept existing app palette but improved readability/contrast: accent gradient progress ring, clearer timer typography, status moved below the circle, grouped background styling, prominent reset button
+  - completion feedback changed to combo: short sound (`SystemSoundID 1104`) + two haptics (`success` then delayed `medium impact`)
+  - added in-run quick cancel via circle long-hold (`~1.2s`): current set resets without incrementing completed plank count; hold progress is shown in red and uses warning haptic on cancel
+- visual redesign update (2026-03-03):
+  - style refactor keeps timer logic/gestures unchanged and focuses only on presentation
+  - new layered background (system gradient + soft accent glows) to avoid flat screen look
+  - added compact hero block with mode chip and quick stats (`База`, `Следующий`, `До +X сек`)
+  - timer circle moved into a larger material card with cleaner visual hierarchy and improved readability
+  - progression/settings block now includes explicit progress-to-next-increase line and clearer typography
+  - running-state reset button remains behavior-identical, now visually emphasized with red tint
+
+## Session Reliability (iOS)
+- Temporary rollback note (2026-02-16):
+  - attempted reliability patch (`idleTimerDisabled` in `ContentView` + BLE restoration + `UIBackgroundModes bluetooth-central`) was reverted after user-reported white-screen launch issue on device
+  - current code is intentionally restored to pre-patch behavior until root cause is reproduced and fixed safely
+
+## Rules for Next Changes
+- Keep static top area out of swipe pages.
+- Keep swipe pages focused on mode-specific controls only.
+- Prefer adding shared UI blocks in separate small views instead of duplicating code.
+- Do not alter safety behavior in UI-only refactors; business logic stays in `BluetoothManager`.
+
+## File References
+- `ContentView`: `ios/WalkingPadRemote/WalkingPadRemote/WalkingPadRemote/ContentView.swift`
+- `Plank tab`: `ios/WalkingPadRemote/WalkingPadRemote/WalkingPadRemote/PlankTimerView.swift` (`PlankTimerView`)
+- Manager logic: `ios/WalkingPadRemote/WalkingPadRemote/WalkingPadRemote/BluetoothManager.swift`
