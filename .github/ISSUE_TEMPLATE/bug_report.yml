@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible problem in the app, BLE flow, or tooling.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Provide a minimal, reproducible report. Include device, OS, and exact steps.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: Short description of the problem.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Device, OS, Xcode, watchOS, treadmill model, or Python version if relevant.
+      placeholder: iPhone 15 Pro, iOS 26.2, Apple Watch Series 9, WalkingPad A1 Pro
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - HR control
+        - BLE / treadmill connection
+        - Stats / telemetry
+        - Plank tab
+        - Watch app
+        - Python tools
+        - Build / CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or extra context
+      description: Paste relevant output or attach screenshots if available.

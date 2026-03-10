@@ -11,6 +11,7 @@ WalkingPad control project with an iOS/watchOS app, HR-driven treadmill control,
 ## Public repo notes
 
 - The local `ph4-walkingpad` clone is intentionally not included in this repository because it is an upstream reference repo with its own git history.
+- The repository now includes a public baseline: MIT license, GitHub Actions CI, CODEOWNERS, and issue forms.
 
 ### Run core logic tests
 
@@ -20,3 +21,9 @@ swift test
 ```
 
 See [ios/README.md](ios/README.md) for iOS target details.
+
+## Contributing
+
+- Use the GitHub issue forms for bugs and feature requests.
+- For iOS builds, select your own signing team in Xcode.
+- CI runs Python syntax checks, Swift package tests, and an unsigned Xcode build on pull requests and pushes to `main`.

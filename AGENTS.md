@@ -22,6 +22,10 @@
   - `ios/README.md` now documents the included Xcode project instead of a manual project bootstrap flow
   - `ios/WalkingPadRemote/WalkingPadRemote/Package.swift` now excludes UI/resources from the core logic target to keep `swift test` warning-free
   - iOS-specific `AGENTS.md` was moved out of the app target folder so it no longer ships inside the app bundle
+- Public repo baseline (2026-03-10):
+  - added `MIT` license file
+  - added GitHub Actions CI workflow for Python syntax check, Swift tests, and unsigned Xcode build
+  - added `.github/CODEOWNERS` and issue forms under `.github/ISSUE_TEMPLATE`
 - Manual control and HR control are unified under one bottom tab.
 - Last-selected navigation state is persisted:
   - bottom tab selection in `ContentView` is stored in `UserDefaults` (`content_selected_root_tab_v1`)

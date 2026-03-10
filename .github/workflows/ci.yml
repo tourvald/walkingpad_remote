@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-sanity:
+    name: Python Sanity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile Python entrypoints
+        run: |
+          python -m compileall \
+            scan_ble.py \
+            run_live_stats.py \
+            run_menu.py \
+            run_workout.py \
+            tools/mcp_xcode_server.py
+
+  swift-tests:
+    name: Swift Package Tests
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run core logic tests
+        working-directory: ios/WalkingPadRemote/WalkingPadRemote
+        run: swift test
+
+  xcode-build:
+    name: Xcode Build
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build iOS app without code signing
+        run: >
+          xcodebuild
+          -project ios/WalkingPadRemote/WalkingPadRemote/WalkingPadRemote.xcodeproj
+          -scheme WalkingPadRemote
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO
+          build
